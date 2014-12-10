@@ -17,28 +17,18 @@ MatchDiff::MatchDiff() {
 }
 
 bool MatchDiff::equal(std::string a, std::string b) {
-    int count = 0, index = 0;
-    while (count <= diff) {
-        if (index < a.length()) {
-            if (index < b.length()) {
-                if (a[index] != b[index]) {
-                    count++;
-                }
-            } else {
-                count++;
-            }
-        } else {
-            if (index < b.length()) {
-                count++;
-            } else {
-                break;
-            }
+    int count = 0;
+    auto len = a.length();
+    auto c_a = a.data();
+    auto c_b = b.data();
+    for (int i = 0; i < len; i++) {
+        if (std::toupper(c_a[i]) != std::toupper(c_b[i])) {
+            count++;
         }
-        index++;
     }
-    if (count <= diff) {
-        return true;
-    } else {
+    if (count > diff) {
         return false;
+    } else {
+        return true;
     }
 }

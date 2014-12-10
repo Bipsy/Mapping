@@ -9,9 +9,13 @@
 #include "ExactMatch.h"
 
 bool ExactMatch::equal(std::string a, std::string b) {
-    if (a.compare(b) == 0) {
-        return true;
-    } else {
-        return false;
-    }
+    return icompare(a, b);
+}
+
+bool ExactMatch::icompare_pred(unsigned char a, unsigned char b) {
+    return std::tolower(a) == std::tolower(b);
+}
+
+bool ExactMatch::icompare(std::string const& a, std::string const& b) {
+    return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), icompare_pred);
 }

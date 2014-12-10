@@ -21,76 +21,78 @@
 
 using namespace std;
 
-auto convertToUpperCase(const string& strand) -> string {
-    locale loc;
-    string res = strand;
-    size_t len = strand.length();
-    for (int i = 0; i < len; i++) {
-        res[i] = toupper(strand[i], loc);
-    }
-    return res;
-}
-
-auto removeWhiteSpace(const string& strand) -> string {
-    string res = strand;
-    for (auto it = res.begin(); it != res.end(); ++it) {
-        if (isspace(*it)) {
-            res.erase(it);
-            --it;
-        }
-    }
-    return res;
-}
-
 auto produceKmers(const vector<pair<string, int>>& kmers,
                   string strand,
-                  int k) -> vector<pair<string, int>> {
+                  int k, int gap=1) -> vector<pair<string, int>> {
     auto res = kmers;
     auto len = strand.length();
-    for (int i = 0; i + k <= len; ++i) {
+    for (int i = 0; i + k <= len; i+=gap) {
         auto kmer = strand.substr(i, k);
-        kmer = convertToUpperCase(kmer);
         res.push_back(pair<string, int>(kmer, i));
     }
     return res;
 }
 
-auto parseReferenceFile(const char* file_name) -> tuple<string, string> {
+auto parseReferenceFile(const char* file_name,
+                        const char* program_name) -> tuple<string, string> {
     ifstream in_file(file_name);
-    string content;
-    content.assign((istreambuf_iterator<char>(in_file)), istreambuf_iterator<char>());
-    size_t new_line = content.find_first_of('\n');
-    auto reference_name = content.substr(1, new_line);
-    content.erase(0, new_line+1);
-    in_file.close();
-    return tuple<string, string>(content, reference_name);
-}
-
-auto parseReadFile(const char* file_name, const string& reference_name,
-                   vector<Read>& reads) -> vector<Read> {
-    ifstream in_file(file_name);
-    string content;
-    content.assign((istreambuf_iterator<char>(in_file)), (istreambuf_iterator<char>()));
-    content = convertToUpperCase(content);
-    while (!content.empty()) {
-        auto arr_pos = content.find_first_of('>');
-        auto new_line = content.find_first_of('\n', arr_pos);
-        auto read_name = content.substr(arr_pos+1, new_line - (arr_pos+1));
-        content.erase(0, new_line+1);
-        arr_pos = content.find_first_of('>');
-        if (arr_pos == string::npos) {
-            content = removeWhiteSpace(content);
-            Read read(read_name, reference_name, content);
-            reads.push_back(read);
-            break;
-        } else {
-            auto read_sequence = content.substr(0, arr_pos);
-            read_sequence = removeWhiteSpace(read_sequence);
-            Read read(read_name, reference_name, read_sequence);
-            reads.push_back(read);
-            content.erase(0, arr_pos);
+    if (!in_file.good()) {
+        std::cerr << "Usage: " << program_name;
+        std::cerr << " <reference_genome> <read_sequences>" << endl;
+        exit(1);
+    }
+    
+    string line, name, content;
+    while (std::getline(in_file, line).good()) {
+        if (line.empty() || line[0] == '>') {
+            if (!line.empty()) {
+                name = line.substr(1);
+            }
+            content.clear();
+        } else if (!name.empty()) {
+            content += line;
         }
     }
+    
+    return tuple<string, string>(content, name);
+}
+
+auto parseReadFile(const char* file_name, const char* program_name,
+                   const string& reference_name,
+                   vector<Read>& reads) -> vector<Read> {
+    ifstream in_file(file_name);
+    if (!in_file.good()) {
+        std::cerr << "Usage: " << program_name;
+        std::cerr << " <reference_genome> <read_sequences>" << endl;
+        exit(1);
+    }
+    
+    string content, line, name;
+    while (std::getline(in_file, line).good()) {
+        if(line.empty() || line[0] == '>') {
+            if(!name.empty()) { // Print out what we read from the last entry
+                Read read(name, reference_name, content);
+                reads.push_back(read);
+                name.clear();
+            }
+            if(!line.empty()) {
+                name = line.substr(1);
+            }
+            content.clear();
+        } else if(!name.empty()) {
+            if(line.find(' ') != std::string::npos){ // Invalid sequence--no spaces allowed
+                name.clear();
+                content.clear();
+            } else {
+                content += line;
+            }
+        }
+    }
+    
+    if(!name.empty()) { // Print out what we read from the last entry
+        Read read(name, reference_name, content);
+    }
+    
     return reads;
 }
 
@@ -123,13 +125,12 @@ auto mappedLocations(Read& read, const string& reference_genome, int k,
                    unique_ptr<StringCompare>& comparator) {
     set<int> locations;
     auto len = read.sequence.length();
-    auto read_segments = produceKmers(vector<pair<string, int>>(), read.sequence, k);
+    auto read_segments = produceKmers(vector<pair<string, int>>(), read.sequence, k, 10);
     for (auto segment = read_segments.begin(); segment != read_segments.end(); ++segment) {
         auto indices = retrieveIndices(segment->first, table);
         for (auto index = indices.begin(); index != indices.end(); ++index) {
             if ((*index) - segment->second >= 0) {
                 auto dna_fragment = reference_genome.substr((*index) - segment->second, len);
-                dna_fragment = convertToUpperCase(dna_fragment);
                 if (comparator->equal(dna_fragment, read.sequence)) {
                     locations.insert((*index) - segment->second);
                 }
@@ -158,17 +159,16 @@ int main(int argc, const char * argv[]) {
     
     // Read Input---------------------------------------
     string reference_genome, reference_name;
-    tie(reference_genome, reference_name) = parseReferenceFile(argv[1]);
-    reference_genome = removeWhiteSpace(reference_genome);
-    reads = parseReadFile(argv[2], reference_name, reads);
+    tie(reference_genome, reference_name) = parseReferenceFile(argv[1], argv[0]);
+    reads = parseReadFile(argv[2], argv[0], reference_name, reads);
     //--------------------------------------------------
     
     
-    kmers = produceKmers(kmers, reference_genome, k);
+    kmers = produceKmers(kmers, reference_genome, k, 1);
     hash_table = insertKmers(kmers, hash_table);
     
     //Perform Mapping---------------------------------------
-    unique_ptr<StringCompare> comparator = make_unique<ExactMatch>();
+    unique_ptr<StringCompare> comparator = make_unique<MatchDiff>(1);
     for (auto it = reads.begin(); it != reads.end(); ++it) {
         mappedLocations(*it, reference_genome, k, hash_table, comparator);
     }

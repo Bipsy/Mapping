@@ -17,6 +17,8 @@
 class ExactMatch : public StringCompare {
 public:
     virtual bool equal(std::string a, std::string b);
+    static bool icompare_pred(unsigned char a, unsigned char b);
+    static bool icompare(const std::string& a, const std::string& b);
 };
 
 #endif /* defined(__Mapping_Project__ExactMatch__) */

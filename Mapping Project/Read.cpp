@@ -13,7 +13,7 @@
 
 Read::Read(std::string name, std::string reference_name,
            std::string sequence)
-            : name(name), sequence(sequence), reference_name(reference_name) {
+: name(name), reference_name(reference_name), sequence(sequence) {
     mapping_quality = 255;
     flag = 0;
     cigar = "9M";
